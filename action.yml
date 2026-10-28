@@ -1,5 +1,5 @@
 name: WebCheck Action
-description: A reusable GitHub Action for website availability, redirect, TLS certificate, security-header, and route checks with JSON reports and configurable CI failure policies.
+description: GitHub Action for website health checks, redirects, TLS certificates, security headers, and route monitoring.
 author: mwakidenis
 branding:
   icon: check-circle
