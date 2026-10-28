@@ -1,0 +1,47 @@
+{
+  "name": "webcheck-action",
+  "version": "1.0.0",
+  "description": "A reusable GitHub Action for website availability, redirect, TLS certificate, security-header, and route checks with JSON reports and configurable CI failure policies.",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "ncc build src/index.ts -o dist --minify --source-map",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "github-actions",
+    "typescript",
+    "nodejs",
+    "website-monitoring",
+    "tls",
+    "security-headers",
+    "ci-cd",
+    "web-security",
+    "devtools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mwakidenis/WebCheck-Action.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mwakidenis/WebCheck-Action/issues"
+  },
+  "homepage": "https://github.com/mwakidenis/WebCheck-Action#readme",
+  "license": "MIT",
+  "author": "mwakidenis",
+  "dependencies": {
+    "@actions/core": "^1.11.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vercel/ncc": "^0.38.3",
+    "eslint": "^8.57.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,17 @@
+name: Website checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check website
+        uses: mwakidenis/webcheck-action@v1
+        with:
+          url: https://example.com

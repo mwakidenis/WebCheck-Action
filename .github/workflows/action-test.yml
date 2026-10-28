@@ -1,0 +1,73 @@
+name: Action Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-action:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build action bundle
+        run: npm run build
+
+      - name: Start local test server
+        run: node .github/scripts/test-server.js 8999 &
+
+      - name: Run WebCheck Action against local server (basic)
+        uses: ./
+        with:
+          url: http://localhost:8999/
+          routes: /health
+            /api/status
+          expected-status-codes: 200
+          timeout: 10
+          max-redirects: 10
+          required-headers: ''
+          fail-on-http-error: true
+          fail-on-redirect: false
+          fail-on-missing-headers: false
+          fail-on-tls-error: true
+          fail-on-certificate-expiry: true
+          fail-on-route-error: true
+          output-file: /tmp/webcheck-report.json
+
+      - name: Run WebCheck Action against local server (redirects)
+        uses: ./
+        with:
+          url: http://localhost:8999/redirect-one
+          routes: /
+          expected-status-codes: 200
+          timeout: 10
+          max-redirects: 10
+          required-headers: ''
+          fail-on-http-error: true
+          fail-on-redirect: false
+          fail-on-missing-headers: false
+          fail-on-tls-error: true
+          fail-on-certificate-expiry: true
+          fail-on-route-error: true
+          output-file: /tmp/webcheck-redirect-report.json
+
+      - name: Verify reports were generated
+        run: |
+          test -f /tmp/webcheck-report.json
+          test -f /tmp/webcheck-redirect-report.json
+          node -e "const r=require('/tmp/webcheck-report.json'); console.log(JSON.stringify({overall:r.overall, http:r.http.statusCode, routes:r.routes.length}, null, 2))"

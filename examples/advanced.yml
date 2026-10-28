@@ -1,0 +1,34 @@
+name: Website checks (advanced)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check website
+        uses: mwakidenis/webcheck-action@v1
+        with:
+          url: https://example.com
+          routes: |
+            /
+            /health
+            /api/status
+          expected-status-codes: 200,204
+          timeout: 15
+          max-redirects: 10
+          required-headers: strict-transport-security, content-security-policy, x-content-type-options, referrer-policy, permissions-policy
+          certificate-warning-days: 30
+          certificate-failure-days: 7
+          fail-on-http-error: true
+          fail-on-redirect: false
+          fail-on-missing-headers: true
+          fail-on-tls-error: true
+          fail-on-certificate-expiry: true
+          fail-on-route-error: true
+          output-file: webcheck-report.json

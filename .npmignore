@@ -1,0 +1,13 @@
+src/
+tests/
+package.json
+package-lock.json
+tsconfig.json
+.eslintrc.json
+README.md
+LICENSE
+SECURITY.md
+CONTRIBUTING.md
+CHANGELOG.md
+.github/
+examples/

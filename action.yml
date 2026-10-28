@@ -1,0 +1,83 @@
+name: WebCheck Action
+description: A reusable GitHub Action for website availability, redirect, TLS certificate, security-header, and route checks with JSON reports and configurable CI failure policies.
+author: mwakidenis
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  url:
+    description: 'Target URL to check (http or https)'
+    required: true
+  routes:
+    description: 'Newline-separated list of routes to check (e.g. /health, /api/status)'
+    required: false
+    default: '/'
+  expected-status-codes:
+    description: 'Comma-separated list of expected HTTP status codes (e.g. 200, 204)'
+    required: false
+    default: '200'
+  timeout:
+    description: 'Request timeout in seconds'
+    required: false
+    default: '10'
+  max-redirects:
+    description: 'Maximum number of redirects to follow'
+    required: false
+    default: '10'
+  required-headers:
+    description: 'Comma-separated list of required security header names (e.g. strict-transport-security, content-security-policy)'
+    required: false
+    default: ''
+  certificate-warning-days:
+    description: 'Days remaining until certificate expiry that triggers a warning'
+    required: false
+    default: '14'
+  certificate-failure-days:
+    description: 'Days remaining until certificate expiry that triggers a failure'
+    required: false
+    default: '7'
+  fail-on-http-error:
+    description: 'Fail the action when HTTP status is not an expected code'
+    required: false
+    default: 'true'
+  fail-on-redirect:
+    description: 'Fail the action when a redirect is detected'
+    required: false
+    default: 'false'
+  fail-on-missing-headers:
+    description: 'Fail the action when a required security header is missing'
+    required: false
+    default: 'false'
+  fail-on-tls-error:
+    description: 'Fail the action when a TLS error is detected'
+    required: false
+    default: 'true'
+  fail-on-certificate-expiry:
+    description: 'Fail the action when the certificate is expired or within failure threshold'
+    required: false
+    default: 'true'
+  fail-on-route-error:
+    description: 'Fail the action when any configured route errors'
+    required: false
+    default: 'true'
+  output-file:
+    description: 'Path to write the JSON report'
+    required: false
+    default: 'webcheck-report.json'
+  baseline-file:
+    description: 'Optional path to a baseline JSON report for comparison'
+    required: false
+    default: ''
+
+outputs:
+  result:
+    description: 'Overall scan result: passed or failed'
+  report-path:
+    description: 'Path to the generated JSON report file'
+  findings-count:
+    description: 'Total number of findings (warnings + errors)'
+
+runs:
+  using: node20
+  main: dist/index.js
