@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+title: WebCheck Action
+message: >-
+  If you use this software, please cite it as below.
+authors:
+  - family-names: Denis
+    given-names: Mwakidenis
+    orcid: https://orcid.org/0000-0000-0000-0000
+title: WebCheck Action
+version: 1.0.0
+date-released: 2026-10-28
+url: https://github.com/mwakidenis/WebCheck-Action
+repository-code: https://github.com/mwakidenis/WebCheck-Action
+license: MIT
+abstract: >-
+  A reusable GitHub Action for website availability, redirect, TLS certificate,
+  security-header, and route checks with JSON reports and configurable CI
+  failure policies.
+keywords:
+  - github-actions
+  - typescript
+  - nodejs
+  - website-monitoring
+  - tls
+  - security-headers
+  - ci-cd
+  - web-security
+  - devtools
+identifiers:
+  - type: url
+    value: https://github.com/mwakidenis/WebCheck-Action
+    description: WebCheck Action repository
+preferred-citation:
+  type: software
+  authors:
+    - family-names: Denis
+      given-names: Mwakidenis
+  title: WebCheck Action
+  version: 1.0.0
+  date-released: 2026-10-28
+  url: https://github.com/mwakidenis/WebCheck-Action
+  repository-code: https://github.com/mwakidenis/WebCheck-Action
