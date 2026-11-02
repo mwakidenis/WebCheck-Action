@@ -85,6 +85,14 @@ inputs:
     description: 'Fail the action when any configured route errors'
     required: false
     default: 'true'
+  fail-on-insecure-cookies:
+    description: 'Fail the action when cookies lack Secure/HttpOnly/SameSite flags'
+    required: false
+    default: 'true'
+  fail-on-dangerous-cors:
+    description: 'Fail the action when CORS policy is dangerous (wildcard origin with credentials)'
+    required: false
+    default: 'true'
   output-file:
     description: 'Path to write the JSON report'
     required: false
@@ -107,6 +115,10 @@ outputs:
     description: 'Whether TLS certificate is valid and authorized'
   performance-within-threshold:
     description: 'Whether response time is within the performance threshold'
+  cookie-secure:
+    description: 'Whether all cookies have Secure flag set'
+  cors-safe:
+    description: 'Whether CORS policy is safe (no wildcard origin with credentials)'
 
 runs:
   using: node20

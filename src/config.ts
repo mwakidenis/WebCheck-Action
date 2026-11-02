@@ -4,7 +4,9 @@ export type PolicyName =
   | 'fail-on-missing-headers'
   | 'fail-on-tls-error'
   | 'fail-on-certificate-expiry'
-  | 'fail-on-route-error';
+  | 'fail-on-route-error'
+  | 'fail-on-insecure-cookies'
+  | 'fail-on-dangerous-cors';
 
 export interface HTTPResult {
   statusCode: number | null;
@@ -58,6 +60,41 @@ export interface SecurityHeadersResult {
   headers: HeaderFinding[];
   missingRequired: HeaderFinding[];
   present: HeaderFinding[];
+  error: string | null;
+}
+
+export interface CookieFinding {
+  name: string;
+  secure: boolean | null;
+  httpOnly: boolean | null;
+  sameSite: string | null;
+  prefix: string | null;
+  status: 'secure' | 'warning' | 'error';
+  notes: string[];
+}
+
+export interface CookieSecurityResult {
+  cookies: CookieFinding[];
+  totalCookies: number;
+  secureCount: number;
+  httpOnlyCount: number;
+  sameSiteCount: number;
+  error: string | null;
+}
+
+export interface CORSResult {
+  allowOrigin: string | null;
+  allowCredentials: boolean | null;
+  allowMethods: string | null;
+  allowHeaders: string | null;
+  exposeHeaders: string | null;
+  status: 'secure' | 'warning' | 'error';
+  notes: string[];
+}
+
+export interface AdvancedSecurityResult {
+  cookies: CookieSecurityResult;
+  cors: CORSResult;
   error: string | null;
 }
 
@@ -128,6 +165,7 @@ export interface ScanReport {
   dns: DNSResult;
   performance: PerformanceResult;
   headers: SecurityHeadersResult;
+  advanced: AdvancedSecurityResult;
   routes: RouteResult[];
   findings: Finding[];
   policyEvaluations: PolicyEvaluation[];
@@ -157,6 +195,8 @@ export interface ActionConfig {
   failOnTLSError: boolean;
   failOnCertificateExpiry: boolean;
   failOnRouteError: boolean;
+  failOnInsecureCookies: boolean;
+  failOnDangerousCORS: boolean;
   outputFile: string;
   baselineFile: string;
   allowProhibitedIPs: boolean;
@@ -248,6 +288,8 @@ export function parseInputs(raw: Record<string, string>, options: ParseInputsOpt
   const failOnTLSError = parseBool('fail-on-tls-error', raw['fail-on-tls-error'], true);
   const failOnCertificateExpiry = parseBool('fail-on-certificate-expiry', raw['fail-on-certificate-expiry'], true);
   const failOnRouteError = parseBool('fail-on-route-error', raw['fail-on-route-error'], true);
+  const failOnInsecureCookies = parseBool('fail-on-insecure-cookies', raw['fail-on-insecure-cookies'], true);
+  const failOnDangerousCORS = parseBool('fail-on-dangerous-cors', raw['fail-on-dangerous-cors'], true);
 
   const outputFile = (raw['output-file'] || 'webcheck-report.json').trim() || 'webcheck-report.json';
   const baselineFile = (raw['baseline-file'] || '').trim();
@@ -273,6 +315,8 @@ export function parseInputs(raw: Record<string, string>, options: ParseInputsOpt
     failOnTLSError,
     failOnCertificateExpiry,
     failOnRouteError,
+    failOnInsecureCookies,
+    failOnDangerousCORS,
     outputFile,
     baselineFile,
     allowProhibitedIPs: !!options.allowProhibitedIPs,

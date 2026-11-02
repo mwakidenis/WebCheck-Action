@@ -7,6 +7,8 @@ import { checkTLS } from './checks/tls';
 import { checkSecurityHeaders } from './checks/headers';
 import { checkRoutes } from './checks/routes';
 import { checkDNS } from './checks/dns';
+import { checkCookieSecurity } from './checks/cookies';
+import { checkCORS } from './checks/cors';
 import { parseAndValidateURL, URLValidationError } from './security/url-validation';
 import { checkIP } from './security/ip-validation';
 import { buildReport, writeReport } from './report/json';
@@ -127,6 +129,31 @@ function evaluatePerformancePolicy(config: ActionConfig, perf: ScanReport['perfo
   };
 }
 
+function evaluateInsecureCookiesPolicy(advanced: ScanReport['advanced']): PolicyEvaluation {
+  const insecureCookies = advanced.cookies.cookies.filter(
+    (c) => c.status === 'error' || (!c.secure && !advanced.cookies.cookies.some((x) => x.name === c.name && x.prefix === '__Secure-'))
+  );
+  const violated = insecureCookies.length > 0;
+  return {
+    name: 'fail-on-insecure-cookies',
+    enabled: true,
+    violated,
+    message: violated
+      ? `Insecure cookie(s) detected: ${insecureCookies.map((c) => c.name).join(', ')}`
+      : null,
+  };
+}
+
+function evaluateDangerousCORSPolicy(advanced: ScanReport['advanced']): PolicyEvaluation {
+  const violated = advanced.cors.status === 'error';
+  return {
+    name: 'fail-on-dangerous-cors',
+    enabled: true,
+    violated,
+    message: advanced.cors.status === 'error' ? advanced.cors.notes.join('; ') : null,
+  };
+}
+
 function isPolicyEnabled(config: ActionConfig, name: PolicyName): boolean {
   switch (name) {
     case 'fail-on-http-error': return config.failOnHTTpError;
@@ -135,6 +162,8 @@ function isPolicyEnabled(config: ActionConfig, name: PolicyName): boolean {
     case 'fail-on-tls-error': return config.failOnTLSError;
     case 'fail-on-certificate-expiry': return config.failOnCertificateExpiry;
     case 'fail-on-route-error': return config.failOnRouteError;
+    case 'fail-on-insecure-cookies': return config.failOnInsecureCookies;
+    case 'fail-on-dangerous-cors': return config.failOnDangerousCORS;
   }
 }
 
@@ -305,7 +334,29 @@ async function run(): Promise<void> {
       }
     }
 
-    // 6. Route checks.
+    // 6. Advanced security checks: cookies and CORS.
+    const setCookieRaw = http.headers['set-cookie'];
+    const setCookieHeaders = Array.isArray(setCookieRaw) ? setCookieRaw : setCookieRaw ? [setCookieRaw] : null;
+    const advanced: ScanReport['advanced'] = {
+      cookies: checkCookieSecurity(setCookieHeaders),
+      cors: checkCORS(http.headers),
+      error: null,
+    };
+    report.advanced = advanced;
+    for (const c of advanced.cookies.cookies) {
+      if (c.status === 'error') {
+        report.warnings.push(`Insecure cookie: ${c.name} (${c.notes.join('; ')})`);
+      } else if (c.status === 'warning') {
+        report.warnings.push(`Cookie may be insecure: ${c.name} (${c.notes.join('; ')})`);
+      }
+    }
+    if (advanced.cors.status === 'error') {
+      report.errors.push(`Dangerous CORS policy: ${advanced.cors.notes.join('; ')}`);
+    } else if (advanced.cors.status === 'warning') {
+      report.warnings.push(`CORS warning: ${advanced.cors.notes.join('; ')}`);
+    }
+
+    // 7. Route checks.
     const routes = await checkRoutes({
       baseURL: config.url,
       routes: config.routes,
@@ -327,7 +378,7 @@ async function run(): Promise<void> {
       }
     }
 
-    // 7. Policy evaluations.
+    // 8. Policy evaluations.
     const policyEvaluations = [
       evaluateHTTPPolicy(config, http),
       evaluateRedirectPolicy(config, http),
@@ -336,6 +387,8 @@ async function run(): Promise<void> {
       evaluateCertificateExpiryPolicy(config, report.tls),
       evaluateRouteErrorPolicy(config, routes),
       evaluatePerformancePolicy(config, perf),
+      evaluateInsecureCookiesPolicy(report.advanced),
+      evaluateDangerousCORSPolicy(report.advanced),
     ];
     report.policyEvaluations = policyEvaluations;
 
@@ -346,7 +399,7 @@ async function run(): Promise<void> {
       }
     }
 
-    // 8. Baseline comparison (if a baseline file is configured).
+    // 9. Baseline comparison (if a baseline file is configured).
     if (config.baselineFile) {
       const baseline = loadBaseline(config.baselineFile);
       if (baseline) {
@@ -394,7 +447,7 @@ async function run(): Promise<void> {
     }
     report.findings = findings;
 
-    // 9. Write report file.
+    // 10. Write report file.
     try {
       writeReport(report, config.outputFile);
       core.info(`Report written to ${config.outputFile}`);
@@ -405,7 +458,7 @@ async function run(): Promise<void> {
       return;
     }
 
-    // 10. GitHub Actions summary.
+    // 11. GitHub Actions summary.
     const summary = generateSummary({ report, config });
     const summaryPath = process.env.GITHUB_STEP_SUMMARY;
     if (summaryPath) {
@@ -416,7 +469,7 @@ async function run(): Promise<void> {
       }
     }
 
-    // 11. Outputs.
+    // 12. Outputs.
     core.setOutput('result', report.overall);
     core.setOutput('report-path', config.outputFile);
     core.setOutput('findings-count', String(report.findings.length));
@@ -426,6 +479,8 @@ async function run(): Promise<void> {
       'performance-within-threshold',
       String(report.performance.withinThreshold ?? false)
     );
+    core.setOutput('cookie-secure', String(report.advanced.cookies.secureCount === report.advanced.cookies.totalCookies && report.advanced.cookies.totalCookies > 0));
+    core.setOutput('cors-safe', String(report.advanced.cors.status === 'secure'));
 
     core.info(`WebCheck Action completed: ${report.overall}`);
 

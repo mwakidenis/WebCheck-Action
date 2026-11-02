@@ -179,6 +179,34 @@ export function generateSummary(options: SummaryOptions): string {
   }
   lines.push('');
 
+  // Advanced security section
+  lines.push('## Advanced Security');
+  lines.push('');
+  const adv = report.advanced;
+  lines.push('### Cookies');
+  lines.push(`- Total cookies: ${adv.cookies.totalCookies}`);
+  lines.push(`- Secure flag: ${adv.cookies.secureCount}/${adv.cookies.totalCookies}`);
+  lines.push(`- HttpOnly flag: ${adv.cookies.httpOnlyCount}/${adv.cookies.totalCookies}`);
+  lines.push(`- SameSite attribute: ${adv.cookies.sameSiteCount}/${adv.cookies.totalCookies}`);
+  if (adv.cookies.cookies.length > 0) {
+    for (const c of adv.cookies.cookies) {
+      lines.push(`  - ${c.name}: Secure=${c.secure}, HttpOnly=${c.httpOnly}, SameSite=${c.sameSite ?? 'none'}, Prefix=${c.prefix ?? 'none'}, Status=${c.status}`);
+      if (c.notes.length > 0) {
+        lines.push(`    Notes: ${c.notes.join('; ')}`);
+      }
+    }
+  }
+  lines.push('');
+  lines.push('### CORS');
+  lines.push(`- Allow-Origin: ${adv.cors.allowOrigin ?? 'none'}`);
+  lines.push(`- Allow-Credentials: ${adv.cors.allowCredentials ?? false}`);
+  lines.push(`- Allow-Methods: ${adv.cors.allowMethods ?? 'none'}`);
+  lines.push(`- Status: ${adv.cors.status}`);
+  if (adv.cors.notes.length > 0) {
+    lines.push(`- Notes: ${adv.cors.notes.join('; ')}`);
+  }
+  lines.push('');
+
   // Findings
   lines.push('## Findings');
   lines.push('');

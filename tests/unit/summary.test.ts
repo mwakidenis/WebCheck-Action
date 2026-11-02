@@ -67,8 +67,28 @@ const baseReport: ScanReport = {
     error: null,
   },
   routes: [
-    { route: '/', url: 'https://example.com/', statusCode: 200, error: null, transportError: false, redirected: false, redirectCount: 0, finalURL: 'https://example.com/' },
+    { route: '/', url: 'https://example.com/', statusCode: 200, error: null, transportError: false, redirected: false, redirectCount: 0, finalURL: 'https://example.com/', responseTimeMs: 120 },
   ],
+  advanced: {
+    cookies: {
+      cookies: [],
+      totalCookies: 0,
+      secureCount: 0,
+      httpOnlyCount: 0,
+      sameSiteCount: 0,
+      error: null,
+    },
+    cors: {
+      allowOrigin: null,
+      allowCredentials: null,
+      allowMethods: null,
+      allowHeaders: null,
+      exposeHeaders: null,
+      status: 'secure',
+      notes: [],
+    },
+    error: null,
+  },
   findings: [],
   policyEvaluations: [
     { name: 'fail-on-http-error', enabled: true, violated: false, message: null },
