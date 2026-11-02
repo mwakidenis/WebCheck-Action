@@ -35,7 +35,8 @@ jobs:
         uses: ./
         with:
           url: http://localhost:8999/
-          routes: /health
+          routes: |
+            /health
             /api/status
           expected-status-codes: 200
           timeout: 10
