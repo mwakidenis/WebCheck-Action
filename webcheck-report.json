@@ -1,0 +1,142 @@
+{
+  "tool": "webcheck-action",
+  "version": "1.0.0",
+  "timestamp": "2026-11-02T10:05:58.637Z",
+  "target": "http://localhost:8999/",
+  "overall": "failed",
+  "http": {
+    "statusCode": 200,
+    "statusMessage": "OK",
+    "finalURL": "http://localhost:8999/",
+    "redirectChain": [
+      "http://localhost:8999/"
+    ],
+    "redirectCount": 0,
+    "responseTimeMs": 13,
+    "connectTimeMs": 9,
+    "error": null,
+    "transportError": false,
+    "headers": {
+      "content-type": "text/plain",
+      "date": "Mon, 02 Nov 2026 10:05:58 GMT",
+      "connection": "close",
+      "transfer-encoding": "chunked"
+    },
+    "bodySize": 2
+  },
+  "tls": {
+    "enabled": false,
+    "certificate": null,
+    "handshakeError": null,
+    "hostnameMismatch": false,
+    "error": null,
+    "insecure": false
+  },
+  "dns": {
+    "resolved": true,
+    "addresses": [
+      "::1",
+      "127.0.0.1"
+    ],
+    "families": [
+      6,
+      4
+    ],
+    "error": null
+  },
+  "performance": {
+    "responseTimeMs": 13,
+    "connectTimeMs": 9,
+    "withinThreshold": null,
+    "thresholdMs": null,
+    "error": null
+  },
+  "headers": {
+    "headers": [],
+    "missingRequired": [],
+    "present": [],
+    "error": null
+  },
+  "routes": [
+    {
+      "route": "$/healthn/api/status",
+      "url": "http://localhost:8999/",
+      "statusCode": null,
+      "error": "Route must start with \"/\": $/healthn/api/status",
+      "transportError": true,
+      "redirected": false,
+      "redirectCount": 0,
+      "finalURL": null,
+      "responseTimeMs": null
+    }
+  ],
+  "findings": [
+    {
+      "type": "error",
+      "category": "http",
+      "message": "Route $/healthn/api/status: Route must start with \"/\": $/healthn/api/status"
+    },
+    {
+      "type": "error",
+      "category": "http",
+      "message": "Policy violated: fail-on-route-error - Route(s) failed: $/healthn/api/status"
+    },
+    {
+      "type": "warning",
+      "category": "http",
+      "message": "Target is not HTTPS; TLS certificate checks skipped."
+    }
+  ],
+  "policyEvaluations": [
+    {
+      "name": "fail-on-http-error",
+      "enabled": true,
+      "violated": false,
+      "message": null
+    },
+    {
+      "name": "fail-on-redirect",
+      "enabled": false,
+      "violated": false,
+      "message": null
+    },
+    {
+      "name": "fail-on-missing-headers",
+      "enabled": false,
+      "violated": false,
+      "message": null
+    },
+    {
+      "name": "fail-on-tls-error",
+      "enabled": true,
+      "violated": false,
+      "message": null
+    },
+    {
+      "name": "fail-on-certificate-expiry",
+      "enabled": true,
+      "violated": false,
+      "message": null
+    },
+    {
+      "name": "fail-on-route-error",
+      "enabled": true,
+      "violated": true,
+      "message": "Route(s) failed: $/healthn/api/status"
+    },
+    {
+      "name": "fail-on-http-error",
+      "enabled": false,
+      "violated": false,
+      "message": null
+    }
+  ],
+  "baselineComparison": null,
+  "errors": [
+    "Route $/healthn/api/status: Route must start with \"/\": $/healthn/api/status",
+    "Policy violated: fail-on-route-error - Route(s) failed: $/healthn/api/status"
+  ],
+  "warnings": [
+    "Target is not HTTPS; TLS certificate checks skipped."
+  ]
+}
