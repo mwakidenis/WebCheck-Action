@@ -1,5 +1,5 @@
 name: WebCheck Action
-description: GitHub Action for website health checks, redirects, TLS certificates, security headers, and route monitoring.
+description: GitHub Action for website health checks, redirects, TLS certificates, security headers, DNS, performance, and route monitoring with JSON reports and configurable CI failure policies.
 author: mwakidenis
 branding:
   icon: check-circle
@@ -18,13 +18,21 @@ inputs:
     required: false
     default: '200'
   timeout:
-    description: 'Request timeout in seconds'
+    description: 'Total request timeout in seconds'
     required: false
     default: '10'
+  connect-timeout:
+    description: 'Connection timeout in seconds'
+    required: false
+    default: '5'
   max-redirects:
     description: 'Maximum number of redirects to follow'
     required: false
     default: '10'
+  follow-redirects:
+    description: 'Whether to follow HTTP redirects'
+    required: false
+    default: 'true'
   required-headers:
     description: 'Comma-separated list of required security header names (e.g. strict-transport-security, content-security-policy)'
     required: false
@@ -37,6 +45,22 @@ inputs:
     description: 'Days remaining until certificate expiry that triggers a failure'
     required: false
     default: '7'
+  allow-insecure-tls:
+    description: 'Allow insecure TLS connections (self-signed certificates, etc.) for local testing only'
+    required: false
+    default: 'false'
+  user-agent:
+    description: 'Custom User-Agent header value'
+    required: false
+    default: ''
+  max-response-size-kb:
+    description: 'Maximum response body size in kilobytes'
+    required: false
+    default: '10'
+  performance-threshold-ms:
+    description: 'Maximum acceptable response time in milliseconds'
+    required: false
+    default: ''
   fail-on-http-error:
     description: 'Fail the action when HTTP status is not an expected code'
     required: false
@@ -77,6 +101,12 @@ outputs:
     description: 'Path to the generated JSON report file'
   findings-count:
     description: 'Total number of findings (warnings + errors)'
+  dns-resolved:
+    description: 'Whether DNS resolution succeeded'
+  tls-secure:
+    description: 'Whether TLS certificate is valid and authorized'
+  performance-within-threshold:
+    description: 'Whether response time is within the performance threshold'
 
 runs:
   using: node20

@@ -6,6 +6,7 @@ import { fetchURL, HTTPRequestOptions } from './http/client';
 import { checkTLS } from './checks/tls';
 import { checkSecurityHeaders } from './checks/headers';
 import { checkRoutes } from './checks/routes';
+import { checkDNS } from './checks/dns';
 import { parseAndValidateURL, URLValidationError } from './security/url-validation';
 import { checkIP } from './security/ip-validation';
 import { buildReport, writeReport } from './report/json';
@@ -15,10 +16,13 @@ import { compareBaseline, loadBaseline } from './baseline/compare';
 function buildClientOptions(config: ActionConfig, servername?: string): HTTPRequestOptions {
   return {
     timeoutMs: config.timeoutSeconds * 1000,
+    connectTimeoutMs: config.connectTimeoutSeconds * 1000,
     maxRedirects: config.maxRedirects,
-    followRedirects: true,
-    rejectUnauthorized: true,
+    maxResponseSize: config.maxResponseSizeKB * 1024,
+    followRedirects: config.followRedirects,
+    rejectUnauthorized: !config.allowInsecureTLS,
     servername,
+    userAgent: config.userAgent ?? undefined,
   };
 }
 
@@ -57,11 +61,14 @@ function evaluateMissingHeadersPolicy(config: ActionConfig, headers: ScanReport[
   };
 }
 
-function evaluateTLSErrorPolicy(tls: ScanReport['tls']): PolicyEvaluation {
-  const violated = Boolean(tls.error);
+function evaluateTLSErrorPolicy(
+  config: ActionConfig,
+  tls: ScanReport['tls']
+): PolicyEvaluation {
+  const violated = Boolean(tls.error && !tls.insecure);
   return {
     name: 'fail-on-tls-error',
-    enabled: true, // always evaluated; config flag below
+    enabled: config.failOnTLSError,
     violated,
     message: tls.error ?? null,
   };
@@ -105,6 +112,21 @@ function evaluateRouteErrorPolicy(config: ActionConfig, routes: ScanReport['rout
   };
 }
 
+function evaluatePerformancePolicy(config: ActionConfig, perf: ScanReport['performance']): PolicyEvaluation {
+  if (!config.performanceThresholdMs) {
+    return { name: 'fail-on-http-error', enabled: false, violated: false, message: null };
+  }
+  const violated = perf.responseTimeMs !== null && perf.responseTimeMs > config.performanceThresholdMs;
+  return {
+    name: 'fail-on-http-error',
+    enabled: config.failOnHTTpError,
+    violated,
+    message: violated
+      ? `Response time ${perf.responseTimeMs}ms exceeds threshold ${config.performanceThresholdMs}ms`
+      : null,
+  };
+}
+
 function isPolicyEnabled(config: ActionConfig, name: PolicyName): boolean {
   switch (name) {
     case 'fail-on-http-error': return config.failOnHTTpError;
@@ -124,10 +146,16 @@ async function run(): Promise<void> {
       'routes',
       'expected-status-codes',
       'timeout',
+      'connect-timeout',
       'max-redirects',
+      'follow-redirects',
       'required-headers',
       'certificate-warning-days',
       'certificate-failure-days',
+      'allow-insecure-tls',
+      'user-agent',
+      'max-response-size-kb',
+      'performance-threshold-ms',
       'fail-on-http-error',
       'fail-on-redirect',
       'fail-on-missing-headers',
@@ -162,9 +190,8 @@ async function run(): Promise<void> {
     }
 
     // Re-confirm resolved IP is not prohibited (revalidation at request time).
-    let ipCheck: ReturnType<typeof checkIP> | null = null;
     try {
-      ipCheck = checkIP(validatedURL.hostname);
+      const ipCheck = checkIP(validatedURL.hostname);
       if (ipCheck.isProhibited) {
         const msg = `Target hostname resolves to a prohibited address (${validatedURL.hostname}, category: ${ipCheck.category}).`;
         core.error(msg);
@@ -180,7 +207,16 @@ async function run(): Promise<void> {
 
     const clientOpts = buildClientOptions(config, validatedURL.hostname);
 
-    // 1. HTTP availability check on the target URL.
+    // 1. DNS resolution check.
+    const dns = await checkDNS(validatedURL.hostname);
+    report.dns = dns;
+    if (!dns.resolved) {
+      report.errors.push(`DNS resolution failed: ${dns.error ?? 'unknown'}`);
+    } else {
+      core.info(`DNS resolved ${validatedURL.hostname} to ${dns.addresses.join(', ')}`);
+    }
+
+    // 2. HTTP availability check on the target URL.
     const http = await fetchURL(config.url, clientOpts);
     report.http = http;
 
@@ -190,20 +226,40 @@ async function run(): Promise<void> {
       report.warnings.push(`HTTP status ${http.statusCode} is not in expected codes ${config.expectedStatusCodes.join(', ')}`);
     }
 
-    // 2. TLS certificate check (HTTPS only).
+    // 3. Performance check.
+    const perf: ScanReport['performance'] = {
+      responseTimeMs: http.responseTimeMs,
+      connectTimeMs: http.connectTimeMs,
+      withinThreshold: config.performanceThresholdMs
+        ? http.responseTimeMs !== null && http.responseTimeMs <= config.performanceThresholdMs
+        : null,
+      thresholdMs: config.performanceThresholdMs,
+      error: null,
+    };
+    report.performance = perf;
+    if (perf.withinThreshold === false) {
+      report.warnings.push(
+        `Response time ${http.responseTimeMs}ms exceeds performance threshold ${config.performanceThresholdMs}ms`
+      );
+    }
+
+    // 4. TLS certificate check (HTTPS only).
     if (validatedURL.isSecure) {
       const tls = await checkTLS({
         hostname: validatedURL.hostname,
         port: validatedURL.port,
         servername: validatedURL.hostname,
         timeoutMs: config.timeoutSeconds * 1000,
+        allowInsecureTLS: config.allowInsecureTLS,
       });
       report.tls = tls;
 
-      if (tls.error) {
+      if (tls.error && !tls.insecure) {
         report.errors.push(`TLS error: ${tls.error}`);
+      } else if (tls.error && tls.insecure) {
+        report.warnings.push(`TLS warning: ${tls.error}`);
       }
-      if (tls.handshakeError) {
+      if (tls.handshakeError && !tls.insecure) {
         report.warnings.push(`TLS handshake: ${tls.handshakeError}`);
       }
       if (tls.certificate) {
@@ -219,8 +275,16 @@ async function run(): Promise<void> {
             );
           }
         }
-        if (!cert.authorized) {
+        if (!cert.authorized && !tls.insecure) {
           report.warnings.push(`Certificate not authorized: ${cert.authorizationError ?? 'unknown reason'}`);
+        } else if (!cert.authorized && tls.insecure) {
+          report.warnings.push(`Certificate not authorized (insecure mode): ${cert.authorizationError ?? 'unknown reason'}`);
+        }
+        if (cert.tlsVersion) {
+          core.info(`TLS version: ${cert.tlsVersion}`);
+        }
+        if (cert.cipher) {
+          core.info(`TLS cipher: ${cert.cipher}`);
         }
       }
     } else {
@@ -228,7 +292,7 @@ async function run(): Promise<void> {
       report.warnings.push('Target is not HTTPS; TLS certificate checks skipped.');
     }
 
-    // 3. Security header checks (on the final response).
+    // 5. Security header checks (on the final response).
     const requiredHeaders = config.requiredHeaders.filter((h) => h.length > 0);
     const headers = checkSecurityHeaders(http.headers, requiredHeaders);
     report.headers = headers;
@@ -241,15 +305,18 @@ async function run(): Promise<void> {
       }
     }
 
-    // 4. Route checks.
-    const allowCrossOriginRedirects = false; // documented option; not exposed as input in v1
+    // 6. Route checks.
     const routes = await checkRoutes({
       baseURL: config.url,
       routes: config.routes,
       timeoutMs: config.timeoutSeconds * 1000,
+      connectTimeoutMs: config.connectTimeoutSeconds * 1000,
       maxRedirects: config.maxRedirects,
-      rejectUnauthorized: true,
-      allowCrossOriginRedirects,
+      followRedirects: config.followRedirects,
+      rejectUnauthorized: !config.allowInsecureTLS,
+      allowCrossOriginRedirects: false,
+      userAgent: config.userAgent ?? undefined,
+      maxResponseSizeKB: config.maxResponseSizeKB,
     });
     report.routes = routes;
     for (const route of routes) {
@@ -260,14 +327,15 @@ async function run(): Promise<void> {
       }
     }
 
-    // 5. Policy evaluations.
+    // 7. Policy evaluations.
     const policyEvaluations = [
       evaluateHTTPPolicy(config, http),
       evaluateRedirectPolicy(config, http),
       evaluateMissingHeadersPolicy(config, headers),
-      evaluateTLSErrorPolicy(report.tls),
+      evaluateTLSErrorPolicy(config, report.tls),
       evaluateCertificateExpiryPolicy(config, report.tls),
       evaluateRouteErrorPolicy(config, routes),
+      evaluatePerformancePolicy(config, perf),
     ];
     report.policyEvaluations = policyEvaluations;
 
@@ -278,7 +346,7 @@ async function run(): Promise<void> {
       }
     }
 
-    // 6. Baseline comparison (if a baseline file is configured).
+    // 8. Baseline comparison (if a baseline file is configured).
     if (config.baselineFile) {
       const baseline = loadBaseline(config.baselineFile);
       if (baseline) {
@@ -326,7 +394,7 @@ async function run(): Promise<void> {
     }
     report.findings = findings;
 
-    // 6. Write report file.
+    // 9. Write report file.
     try {
       writeReport(report, config.outputFile);
       core.info(`Report written to ${config.outputFile}`);
@@ -337,7 +405,7 @@ async function run(): Promise<void> {
       return;
     }
 
-    // 7. GitHub Actions summary.
+    // 10. GitHub Actions summary.
     const summary = generateSummary({ report, config });
     const summaryPath = process.env.GITHUB_STEP_SUMMARY;
     if (summaryPath) {
@@ -348,10 +416,16 @@ async function run(): Promise<void> {
       }
     }
 
-    // 8. Outputs.
+    // 11. Outputs.
     core.setOutput('result', report.overall);
     core.setOutput('report-path', config.outputFile);
     core.setOutput('findings-count', String(report.findings.length));
+    core.setOutput('dns-resolved', String(report.dns.resolved));
+    core.setOutput('tls-secure', String(report.tls.enabled && !report.tls.error));
+    core.setOutput(
+      'performance-within-threshold',
+      String(report.performance.withinThreshold ?? false)
+    );
 
     core.info(`WebCheck Action completed: ${report.overall}`);
 

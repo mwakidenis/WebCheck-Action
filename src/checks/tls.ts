@@ -5,6 +5,7 @@ export interface TLSCheckOptions {
   port: number;
   servername?: string;
   timeoutMs: number;
+  allowInsecureTLS: boolean;
 }
 
 export interface TLSCertificateInfo {
@@ -18,6 +19,8 @@ export interface TLSCertificateInfo {
   authorized: boolean;
   authorizationError: string | null;
   error: string | null;
+  tlsVersion: string | null;
+  cipher: string | null;
 }
 
 export interface TLSResult {
@@ -26,6 +29,7 @@ export interface TLSResult {
   handshakeError: string | null;
   hostnameMismatch: boolean;
   error: string | null;
+  insecure: boolean;
 }
 
 type CertLike = Record<string, any>;
@@ -87,7 +91,7 @@ function computeDaysRemaining(validTo: string | null): number | null {
 }
 
 export async function checkTLS(options: TLSCheckOptions): Promise<TLSResult> {
-  const { hostname, port, servername = hostname, timeoutMs } = options;
+  const { hostname, port, servername = hostname, timeoutMs, allowInsecureTLS = false } = options;
 
   const result: TLSResult = {
     enabled: true,
@@ -95,6 +99,7 @@ export async function checkTLS(options: TLSCheckOptions): Promise<TLSResult> {
     handshakeError: null,
     hostnameMismatch: false,
     error: null,
+    insecure: allowInsecureTLS,
   };
 
   const connectOptions: tls.ConnectionOptions = {
@@ -148,6 +153,8 @@ export async function checkTLS(options: TLSCheckOptions): Promise<TLSResult> {
         const cert = sock.getPeerCertificate() as CertLike;
         const authorized = Boolean(sock.authorized);
         const authorizationError = sock.authorizationError ?? null;
+        const tlsVersion = sock.getProtocol?.() ?? null;
+        const cipher = sock.getCipher?.()?.name ?? null;
 
         let certInfo: TLSCertificateInfo | null = null;
         if (cert && Object.keys(cert).length > 0) {
@@ -163,6 +170,8 @@ export async function checkTLS(options: TLSCheckOptions): Promise<TLSResult> {
             authorized,
             authorizationError: sock.authorizationError ? String(sock.authorizationError) : null,
             error: authorized ? null : `Certificate not authorized: ${authorizationError ?? 'unknown reason'}`,
+            tlsVersion,
+            cipher,
           };
         }
 
@@ -170,12 +179,15 @@ export async function checkTLS(options: TLSCheckOptions): Promise<TLSResult> {
 
         let error: string | null = null;
         let handshakeError: string | null = null;
-        if (!authorized) {
+        if (!authorized && !allowInsecureTLS) {
           const reason = authorizationError ?? 'certificate verification failed';
           error = `TLS certificate verification failed: ${reason}`;
           handshakeError = error;
         }
-        if (hostnameMismatch) {
+        if (!authorized && allowInsecureTLS) {
+          error = `TLS certificate not authorized (insecure mode): ${authorizationError ?? 'unknown reason'}`;
+        }
+        if (hostnameMismatch && !allowInsecureTLS) {
           error = `TLS hostname mismatch: certificate does not match ${hostname}`;
           handshakeError = handshakeError || error;
         }

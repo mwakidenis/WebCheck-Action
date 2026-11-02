@@ -7,11 +7,13 @@ import { checkIP } from '../security/ip-validation';
 export interface HTTPRequestOptions {
   method?: string;
   timeoutMs: number;
+  connectTimeoutMs: number;
   maxRedirects: number;
   maxResponseSize?: number;
   followRedirects: boolean;
   rejectUnauthorized: boolean;
   servername?: string;
+  userAgent?: string;
 }
 
 export interface HTTPResponse {
@@ -50,7 +52,7 @@ function buildOptions(parsed: URL, opts: HTTPRequestOptions): RequestOptions {
     rejectUnauthorized: opts.rejectUnauthorized,
     servername: opts.servername ?? parsed.hostname,
     headers: {
-      'User-Agent': 'WebCheck-Action/1.0.0',
+      'User-Agent': opts.userAgent ?? 'WebCheck-Action/1.0.0',
       Accept: '*/*',
       Connection: 'close',
     },
@@ -78,10 +80,13 @@ function readBody(response: http.IncomingMessage, maxSize: number): Promise<Buff
 function requestOnce(
   parsed: URL,
   opts: HTTPRequestOptions
-): Promise<{ response: HTTPResponse; location: string | null }> {
+): Promise<{ response: HTTPResponse; location: string | null; connectTimeMs: number | null }> {
   return new Promise((resolve, reject) => {
     const options = buildOptions(parsed, opts);
+    const connectStart = Date.now();
+    let connectTimeMs: number | null = null;
     const req = getModule(parsed.protocol).request(options, (res: http.IncomingMessage) => {
+      connectTimeMs = Date.now() - connectStart;
       const headers: Record<string, string> = {};
       for (const [key, value] of Object.entries(res.headers)) {
         headers[String(key)] = Array.isArray(value) ? value.join(', ') : String(value);
@@ -99,7 +104,7 @@ function requestOnce(
             url: parsed.toString(),
           };
           const location = (headers['location'] || headers['Location']) ?? null;
-          resolve({ response, location });
+          resolve({ response, location, connectTimeMs });
         })
         .catch((err: Error) => {
           clearTimer();
@@ -118,6 +123,10 @@ function requestOnce(
         timeoutTimer = null;
       }
     };
+
+    req.on('connect', () => {
+      // Connection established - could track TLS handshake time here
+    });
 
     req.on('error', (err: Error) => {
       clearTimer();
@@ -140,6 +149,7 @@ export async function fetchURL(
   redirectChain: string[];
   redirectCount: number;
   responseTimeMs: number | null;
+  connectTimeMs: number | null;
   error: string | null;
   transportError: boolean;
   headers: Record<string, string>;
@@ -150,14 +160,16 @@ export async function fetchURL(
   let currentURL = inputURL;
   let redirectCount = 0;
   let lastResponse: HTTPResponse | null = null;
+  let lastConnectTimeMs: number | null = null;
   let transportError = false;
   let error: string | null = null;
 
   try {
     for (;;) {
       const parsed = new URL(currentURL);
-      const { response, location } = await requestOnce(parsed, opts);
+      const { response, location, connectTimeMs } = await requestOnce(parsed, opts);
       lastResponse = response;
+      lastConnectTimeMs = connectTimeMs;
 
       if (opts.followRedirects && location && response.statusCode >= 300 && response.statusCode < 400) {
         if (redirectCount >= opts.maxRedirects) {
@@ -216,6 +228,7 @@ export async function fetchURL(
     redirectChain,
     redirectCount,
     responseTimeMs,
+    connectTimeMs: lastConnectTimeMs,
     error,
     transportError,
     headers: lastResponse ? lastResponse.headers : {},

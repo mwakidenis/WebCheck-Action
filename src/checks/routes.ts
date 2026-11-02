@@ -9,13 +9,28 @@ export interface RouteCheckOptions {
   baseURL: string;
   routes: string[];
   timeoutMs: number;
+  connectTimeoutMs: number;
   maxRedirects: number;
+  followRedirects: boolean;
   rejectUnauthorized: boolean;
   allowCrossOriginRedirects: boolean;
+  userAgent?: string;
+  maxResponseSizeKB?: number;
 }
 
 export async function checkRoutes(options: RouteCheckOptions): Promise<RouteResult[]> {
-  const { baseURL, routes, timeoutMs, maxRedirects, rejectUnauthorized, allowCrossOriginRedirects } = options;
+  const {
+    baseURL,
+    routes,
+    timeoutMs,
+    connectTimeoutMs,
+    maxRedirects,
+    followRedirects,
+    rejectUnauthorized,
+    allowCrossOriginRedirects,
+    userAgent,
+    maxResponseSizeKB,
+  } = options;
 
   const baseParsed = new URL(baseURL);
   const baseOrigin = `${baseParsed.protocol}//${baseParsed.host}`;
@@ -36,6 +51,7 @@ export async function checkRoutes(options: RouteCheckOptions): Promise<RouteResu
         redirected: false,
         redirectCount: 0,
         finalURL: null,
+        responseTimeMs: null,
       });
       continue;
     }
@@ -55,16 +71,20 @@ export async function checkRoutes(options: RouteCheckOptions): Promise<RouteResu
         redirected: false,
         redirectCount: 0,
         finalURL: null,
+        responseTimeMs: null,
       });
       continue;
     }
 
     const clientOpts: HTTPRequestOptions = {
       timeoutMs,
+      connectTimeoutMs,
       maxRedirects,
-      followRedirects: true,
+      maxResponseSize: maxResponseSizeKB ? maxResponseSizeKB * 1024 : undefined,
+      followRedirects,
       rejectUnauthorized,
       servername: parsedRoute.hostname,
+      userAgent,
     };
 
     const res = await fetchURL(routeURL, clientOpts);
@@ -82,10 +102,10 @@ export async function checkRoutes(options: RouteCheckOptions): Promise<RouteResu
         } else if (res.redirectCount > 0) {
           redirected = true;
         }
-        } catch {
-          // ignore unparseable final URL
-        }
+      } catch {
+        // ignore unparseable final URL
       }
+    }
 
     const errorParts: string[] = [];
     if (res.error) errorParts.push(res.error);
@@ -100,6 +120,7 @@ export async function checkRoutes(options: RouteCheckOptions): Promise<RouteResu
       redirected: res.redirectCount > 0 || redirected,
       redirectCount: res.redirectCount,
       finalURL: res.finalURL ?? null,
+      responseTimeMs: res.responseTimeMs,
     });
   }
 

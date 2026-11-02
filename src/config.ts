@@ -13,10 +13,12 @@ export interface HTTPResult {
   redirectChain: string[];
   redirectCount: number;
   responseTimeMs: number | null;
+  connectTimeMs: number | null;
   error: string | null;
   transportError: boolean;
   headers: Record<string, string>;
   bodySize: number;
+  userAgent?: string | null;
 }
 
 export interface TLSCertificateInfo {
@@ -30,6 +32,8 @@ export interface TLSCertificateInfo {
   authorized: boolean;
   authorizationError: string | null;
   error: string | null;
+  tlsVersion: string | null;
+  cipher: string | null;
 }
 
 export interface TLSResult {
@@ -38,6 +42,7 @@ export interface TLSResult {
   handshakeError: string | null;
   hostnameMismatch: boolean;
   error: string | null;
+  insecure: boolean;
 }
 
 export interface HeaderFinding {
@@ -65,11 +70,12 @@ export interface RouteResult {
   redirected: boolean;
   redirectCount: number;
   finalURL: string | null;
+  responseTimeMs: number | null;
 }
 
 export interface Finding {
-  type: 'warning' | 'error';
-  category: 'http' | 'tls' | 'headers' | 'route' | 'policy' | 'config';
+  type: 'warning' | 'error' | 'info';
+  category: 'http' | 'tls' | 'headers' | 'route' | 'policy' | 'config' | 'dns' | 'performance';
   message: string;
   route?: string;
 }
@@ -79,6 +85,21 @@ export interface PolicyEvaluation {
   enabled: boolean;
   violated: boolean;
   message: string | null;
+}
+
+export interface DNSResult {
+  resolved: boolean;
+  addresses: string[];
+  families: number[];
+  error: string | null;
+}
+
+export interface PerformanceResult {
+  responseTimeMs: number | null;
+  connectTimeMs: number | null;
+  withinThreshold: boolean | null;
+  thresholdMs: number | null;
+  error: string | null;
 }
 
 export interface BaselineComparison {
@@ -104,6 +125,8 @@ export interface ScanReport {
   overall: 'passed' | 'failed';
   http: HTTPResult;
   tls: TLSResult;
+  dns: DNSResult;
+  performance: PerformanceResult;
   headers: SecurityHeadersResult;
   routes: RouteResult[];
   findings: Finding[];
@@ -118,10 +141,16 @@ export interface ActionConfig {
   routes: string[];
   expectedStatusCodes: number[];
   timeoutSeconds: number;
+  connectTimeoutSeconds: number;
   maxRedirects: number;
+  followRedirects: boolean;
   requiredHeaders: string[];
   certificateWarningDays: number;
   certificateFailureDays: number;
+  allowInsecureTLS: boolean;
+  userAgent: string | null;
+  maxResponseSizeKB: number;
+  performanceThresholdMs: number | null;
   failOnHTTpError: boolean;
   failOnRedirect: boolean;
   failOnMissingHeaders: boolean;
@@ -165,7 +194,16 @@ export function parseInputs(raw: Record<string, string>, options: ParseInputsOpt
   }
 
   const timeoutSeconds = parseIntPositive(raw.timeout || '10', 'timeout', 1, 300);
+  const connectTimeoutSeconds = parseIntPositive(
+    raw['connect-timeout'] || '5',
+    'connect-timeout',
+    1,
+    300
+  );
   const maxRedirects = parseIntPositive(raw['max-redirects'] || '10', 'max-redirects', 0, 50);
+
+  const followRedirectsRaw = (raw['follow-redirects'] || 'true').trim();
+  const followRedirects = parseBool('follow-redirects', followRedirectsRaw, true);
 
   const requiredHeadersRaw = (raw['required-headers'] || '').trim();
   const requiredHeaders = requiredHeadersRaw
@@ -191,21 +229,25 @@ export function parseInputs(raw: Record<string, string>, options: ParseInputsOpt
     );
   }
 
-  const parseBool = (key: string, def: boolean): boolean => {
-    const val = raw[key];
-    if (val === undefined || val === '') return def;
-    const lower = val.trim().toLowerCase();
-    if (lower === 'true' || lower === '1') return true;
-    if (lower === 'false' || lower === '0') return false;
-    throw new Error(`Input "${key}" must be a boolean (true/false), got: ${val}`);
-  };
+  const allowInsecureTLS = parseBool('allow-insecure-tls', raw['allow-insecure-tls'], false);
+  const userAgent = (raw['user-agent'] || '').trim() || null;
+  const maxResponseSizeKB = parseIntPositive(
+    raw['max-response-size-kb'] || '10',
+    'max-response-size-kb',
+    1,
+    100
+  );
+  const performanceThresholdMsRaw = (raw['performance-threshold-ms'] || '').trim();
+  const performanceThresholdMs = performanceThresholdMsRaw
+    ? parseIntPositive(performanceThresholdMsRaw, 'performance-threshold-ms', 1, 600000)
+    : null;
 
-  const failOnHTTpError = parseBool('fail-on-http-error', true);
-  const failOnRedirect = parseBool('fail-on-redirect', false);
-  const failOnMissingHeaders = parseBool('fail-on-missing-headers', false);
-  const failOnTLSError = parseBool('fail-on-tls-error', true);
-  const failOnCertificateExpiry = parseBool('fail-on-certificate-expiry', true);
-  const failOnRouteError = parseBool('fail-on-route-error', true);
+  const failOnHTTpError = parseBool('fail-on-http-error', raw['fail-on-http-error'], true);
+  const failOnRedirect = parseBool('fail-on-redirect', raw['fail-on-redirect'], false);
+  const failOnMissingHeaders = parseBool('fail-on-missing-headers', raw['fail-on-missing-headers'], false);
+  const failOnTLSError = parseBool('fail-on-tls-error', raw['fail-on-tls-error'], true);
+  const failOnCertificateExpiry = parseBool('fail-on-certificate-expiry', raw['fail-on-certificate-expiry'], true);
+  const failOnRouteError = parseBool('fail-on-route-error', raw['fail-on-route-error'], true);
 
   const outputFile = (raw['output-file'] || 'webcheck-report.json').trim() || 'webcheck-report.json';
   const baselineFile = (raw['baseline-file'] || '').trim();
@@ -215,10 +257,16 @@ export function parseInputs(raw: Record<string, string>, options: ParseInputsOpt
     routes,
     expectedStatusCodes,
     timeoutSeconds,
+    connectTimeoutSeconds,
     maxRedirects,
+    followRedirects,
     requiredHeaders,
     certificateWarningDays,
     certificateFailureDays,
+    allowInsecureTLS,
+    userAgent,
+    maxResponseSizeKB,
+    performanceThresholdMs,
     failOnHTTpError,
     failOnRedirect,
     failOnMissingHeaders,
@@ -230,6 +278,14 @@ export function parseInputs(raw: Record<string, string>, options: ParseInputsOpt
     allowProhibitedIPs: !!options.allowProhibitedIPs,
     version: '1.0.0',
   };
+}
+
+function parseBool(key: string, val: string | undefined, def: boolean): boolean {
+  if (val === undefined || val === '') return def;
+  const lower = val.trim().toLowerCase();
+  if (lower === 'true' || lower === '1') return true;
+  if (lower === 'false' || lower === '0') return false;
+  throw new Error(`Input "${key}" must be a boolean (true/false), got: ${val}`);
 }
 
 function parseCSVNumbers(input: string, fieldName: string): number[] {
