@@ -81,6 +81,21 @@ export interface PolicyEvaluation {
   message: string | null;
 }
 
+export interface BaselineComparison {
+  baselineFile: string;
+  compared: boolean;
+  newFindings: Finding[];
+  resolvedFindings: Finding[];
+  unchangedFindings: Finding[];
+  summary: {
+    new: number;
+    resolved: number;
+    unchanged: number;
+    total: number;
+  };
+  error: string | null;
+}
+
 export interface ScanReport {
   tool: string;
   version: string;
@@ -93,6 +108,7 @@ export interface ScanReport {
   routes: RouteResult[];
   findings: Finding[];
   policyEvaluations: PolicyEvaluation[];
+  baselineComparison: BaselineComparison | null;
   errors: string[];
   warnings: string[];
 }

@@ -170,6 +170,37 @@ export function generateSummary(options: SummaryOptions): string {
   }
   lines.push('');
 
+  // Baseline comparison section
+  if (report.baselineComparison) {
+    const bc = report.baselineComparison;
+    lines.push('## Baseline Comparison');
+    lines.push('');
+    if (!bc.compared) {
+      lines.push(`Baseline comparison could not be performed: ${bc.error ?? 'unknown error'}`);
+    } else {
+      lines.push(`- Baseline file: ${escapeWorkflowCommand(bc.baselineFile)}`);
+      lines.push(`- New findings (regressions): ${bc.summary.new}`);
+      lines.push(`- Resolved findings: ${bc.summary.resolved}`);
+      lines.push(`- Unchanged findings: ${bc.summary.unchanged}`);
+      lines.push(`- Total findings compared: ${bc.summary.total}`);
+      if (bc.newFindings.length > 0) {
+        lines.push('');
+        lines.push('### New findings (regressions):');
+        for (const f of bc.newFindings) {
+          lines.push(`- [WARNING] ${escapeMarkdown(f.category)}: ${escapeMarkdown(f.message)}`);
+        }
+      }
+      if (bc.resolvedFindings.length > 0) {
+        lines.push('');
+        lines.push('### Resolved findings:');
+        for (const f of bc.resolvedFindings) {
+          lines.push(`- [INFO] ${escapeMarkdown(f.category)}: ${escapeMarkdown(f.message)}`);
+        }
+      }
+    }
+    lines.push('');
+  }
+
   // Errors / warnings
   if (report.errors.length > 0) {
     lines.push('## Errors');

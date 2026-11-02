@@ -10,6 +10,7 @@ import { parseAndValidateURL, URLValidationError } from './security/url-validati
 import { checkIP } from './security/ip-validation';
 import { buildReport, writeReport } from './report/json';
 import { generateSummary } from './report/summary';
+import { compareBaseline, loadBaseline } from './baseline/compare';
 
 function buildClientOptions(config: ActionConfig, servername?: string): HTTPRequestOptions {
   return {
@@ -277,6 +278,32 @@ async function run(): Promise<void> {
       }
     }
 
+    // 6. Baseline comparison (if a baseline file is configured).
+    if (config.baselineFile) {
+      const baseline = loadBaseline(config.baselineFile);
+      if (baseline) {
+        const comparison = compareBaseline(report, baseline);
+        comparison.baselineFile = config.baselineFile;
+        report.baselineComparison = comparison;
+        for (const f of comparison.newFindings) {
+          report.warnings.push(`Baseline regression: ${f.message}`);
+        }
+      } else {
+        report.warnings.push(`Baseline file not found or invalid: ${config.baselineFile}`);
+        report.baselineComparison = {
+          baselineFile: config.baselineFile,
+          compared: false,
+          newFindings: [],
+          resolvedFindings: [],
+          unchangedFindings: [],
+          summary: { new: 0, resolved: 0, unchanged: 0, total: 0 },
+          error: `Baseline file not found or invalid: ${config.baselineFile}`,
+        };
+      }
+    } else {
+      report.baselineComparison = null;
+    }
+
     // Overall result.
     const anyPolicyViolated = policyEvaluations.some((p) => isPolicyEnabled(config, p.name) && p.violated);
     report.overall = report.errors.length > 0 || anyPolicyViolated ? 'failed' : 'passed';
@@ -288,6 +315,14 @@ async function run(): Promise<void> {
     }
     for (const warn of report.warnings) {
       findings.push({ type: 'warning', category: 'http', message: warn });
+    }
+    if (report.baselineComparison) {
+      for (const f of report.baselineComparison.resolvedFindings) {
+        findings.push(f);
+      }
+      for (const f of report.baselineComparison.unchangedFindings) {
+        findings.push(f);
+      }
     }
     report.findings = findings;
 

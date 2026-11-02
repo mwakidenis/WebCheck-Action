@@ -36,6 +36,7 @@ export function buildReport(config: ActionConfig): ScanReport {
     routes: [],
     findings: [],
     policyEvaluations: [],
+    baselineComparison: null,
     errors: [],
     warnings: [],
   };
