@@ -33,7 +33,7 @@
   "license": "MIT",
   "author": "mwakidenis",
   "dependencies": {
-    "@actions/core": "^1.11.1"
+    "@actions/core": "^3.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
