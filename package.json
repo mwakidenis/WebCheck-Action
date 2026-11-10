@@ -40,7 +40,7 @@
     "@typescript-eslint/eslint-plugin": "^8.72.1",
     "@typescript-eslint/parser": "^8.72.1",
     "@vercel/ncc": "^0.45.0",
-    "eslint": "^8.57.0",
+    "eslint": "^10.14.0",
     "typescript": "^7.0.2",
     "vitest": "^2.1.0"
   }
